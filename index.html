@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 香港自由行 (v18.0 安全鎖定版)</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root { --primary: #008080; --secondary: #2c3e50; --bg: #f4f6f8; --card-bg: #ffffff; --text: #333; --delete: #e74c3c; --add: #27ae60; --accent: #f39c12; }
+        body { font-family: 'Helvetica Neue', Arial, 'Microsoft JhengHei', sans-serif; margin: 0; padding: 0; background-color: var(--bg); color: var(--text); line-height: 1.6; }
+        
+        /* 版本標籤 */
+        .version-tag { background: #333; color: #fff; font-size: 0.75rem; padding: 3px 8px; position: fixed; top: 0; left: 0; z-index: 9000; border-bottom-right-radius: 6px; opacity: 0.9; font-family: monospace; letter-spacing: 1px; }
+
+        /* --- 🔐 鎖定畫面樣式 --- */
+        #login-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(44, 62, 80, 0.98); /* 深色背景擋住內容 */
+            z-index: 10000; /* 最高層級 */
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            color: white; backdrop-filter: blur(5px);
+        }
+        .login-box { text-align: center; background: rgba(255,255,255,0.1); padding: 40px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .login-title { font-size: 1.5rem; margin-bottom: 20px; font-weight: bold; }
+        .login-input { padding: 10px 15px; font-size: 1.2rem; border-radius: 8px; border: none; outline: none; text-align: center; width: 200px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;}
+        .btn-unlock { padding: 10px 30px; background: var(--add); color: white; border: none; border-radius: 30px; font-size: 1rem; cursor: pointer; transition: 0.2s; font-weight: bold; }
+        .btn-unlock:hover { transform: scale(1.05); background: #219150; }
+        .login-error { color: #e74c3c; margin-top: 10px; font-size: 0.9rem; min-height: 20px; }
+
+        /* 一般介面樣式 */
+        header { background: linear-gradient(135deg, var(--secondary), var(--primary)); color: white; padding: 2rem 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; }
+        .header-actions { display: flex; justify-content: center; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+        .action-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.5); color: white; padding: 6px 15px; font-size: 0.85rem; cursor: pointer; border-radius: 20px; transition: all 0.2s; display: flex; align-items: center; gap: 5px; }
+        .action-btn:hover { background: rgba(255,255,255,0.3); transform: translateY(-1px); }
+        .btn-reset { background: rgba(231, 76, 60, 0.4); border-color: rgba(231, 76, 60, 0.6); }
+        .btn-reset:hover { background: rgba(231, 76, 60, 0.6); }
+        .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+        textarea.auto-expand { width: 100%; border: 1px solid transparent; background: transparent; font-family: inherit; resize: none; overflow: hidden; line-height: 1.5; min-height: 32px; transition: 0.2s; padding: 4px; box-sizing: border-box; }
+        textarea.auto-expand:hover { background: #f0f4f8; border-radius: 4px; }
+        textarea.auto-expand:focus { background: #fff; border: 1px solid #ddd; outline: none; border-radius: 4px; }
+        .info-card { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 5px solid var(--accent); }
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
+        .info-item h4 { margin: 0 0 5px 0; color: var(--primary); font-size: 0.95rem; }
+        .info-textarea { font-size: 0.9rem; color: #555; width: 100%; display: block; border-bottom: 1px dashed #eee; padding-bottom: 8px; }
+        #map-container { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 2rem; border: 4px solid white; box-shadow: 0 4px 15px rgba(0,0,0,0.08); z-index: 1; position: relative; }
+        .map-hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.95); padding: 8px 15px; border-radius: 20px; font-size: 0.9rem; color: #333; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 1000; pointer-events: none; font-weight: bold; }
+        .tabs { display: flex; overflow-x: auto; background: white; border-radius: 12px 12px 0 0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .tab-btn { flex: 1; min-width: 90px; padding: 1rem; border: none; background: none; cursor: pointer; font-weight: 600; color: #999; border-bottom: 4px solid transparent; }
+        .tab-btn span { display: block; font-size: 0.8em; font-weight: normal; margin-top: 3px;}
+        .tab-btn.active { color: var(--primary); border-bottom: 4px solid var(--primary); background: #fff; }
+        .tab-content { display: none; background: white; padding: 2rem; border-radius: 0 0 12px 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .tab-content.active { display: block; }
+        .timeline-item { position: relative; padding-left: 35px; margin-bottom: 2.5rem; border-left: 3px solid #e0e0e0; display: flex; flex-direction: column; gap: 5px; }
+        .timeline-item:last-child { border-left-color: transparent; margin-bottom: 0; }
+        .timeline-item::before { content: ''; position: absolute; left: -9px; top: 6px; width: 15px; height: 15px; border-radius: 50%; background: var(--primary); border: 3px solid white; box-shadow: 0 0 0 1px #e0e0e0; }
+        input { border: 1px solid transparent; background: transparent; width: 100%; font-family: inherit; transition: all 0.2s; padding: 4px; }
+        input:hover { background: #f0f4f8; border-radius: 4px; }
+        input:focus { background: #fff; border: 1px solid #ddd; outline: none; border-radius: 4px; }
+        .edit-time { font-weight: 800; color: var(--primary); font-size: 1.2rem; width: auto; display: inline-block; }
+        .edit-title { font-weight: bold; font-size: 1.2rem; color: #333; margin-bottom: 4px; cursor: pointer; }
+        .edit-title:focus { cursor: text; border-bottom: 2px solid var(--primary); }
+        .edit-desc { color: #555; font-size: 0.95rem; resize: none; overflow: hidden; line-height: 1.6; min-height: 60px; display: block; background: #fafafa; border-radius: 4px; padding: 12px; padding-bottom: 25px; white-space: pre-wrap; border: 1px solid #eee; box-sizing: border-box; }
+        .coord-wrapper { display: flex; align-items: center; gap: 10px; margin-top: 5px; background: #fcfcfc; border: 1px solid #f0f0f0; padding: 5px 10px; border-radius: 8px; width: fit-content; }
+        .coord-label { font-size: 0.8rem; color: #aaa; margin-right: 5px; }
+        .coord-input { width: 85px; font-size: 0.85rem; color: #666; text-align: center; border-bottom: 1px solid #eee !important; }
+        .search-btn { text-decoration: none; color: white; background-color: #3498db; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
+        .btn-add { width: 100%; padding: 10px; background: #f0fdf4; color: var(--add); border: 2px dashed #bceac9; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 10px; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-delete { position: absolute; right: 0; top: 0; background: white; border: 1px solid #eee; width: 30px; height: 30px; border-radius: 50%; color: #ccc; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0; transition: 0.2s; }
+        .timeline-item:hover .btn-delete { opacity: 1; }
+        .btn-delete:hover { background: var(--delete); color: white; border-color: var(--delete); }
+        .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem; }
+        @media (max-width: 768px) { .bottom-grid { grid-template-columns: 1fr; } }
+        .section-box { background: white; padding: 2rem; border-radius: 12px; height: 100%; display: flex; flex-direction: column;}
+        .budget-table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed;}
+        .budget-table th, .budget-table td { border-bottom: 1px solid #eee; padding: 8px 4px; text-align: left; font-size: 0.9rem; vertical-align: top;}
+        .col-del { width: 30px; } .col-item { width: auto; } .col-num { width: 60px; }
+        .budget-input { width: 100%; text-align: left; resize: none; overflow: hidden; background: transparent; border: none; font-size: 0.9rem; padding: 2px; }
+        .budget-input:focus { background: #fff; border-bottom: 1px solid #ccc; outline: none; }
+        .budget-num-input { width: 100%; text-align: right; border: 1px solid transparent;}
+        .budget-num-input:focus { border-bottom: 1px solid #ccc; outline: none; background: #fff;}
+        .btn-del-row { color: #ccc; cursor: pointer; border: none; background: none; font-size: 1rem; }
+        .btn-del-row:hover { color: var(--delete); }
+        .checklist-item { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; padding: 6px; background: #f9f9f9; border-radius: 6px; }
+        .checklist-item input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; margin-top: 3px; flex-shrink: 0;}
+        .checklist-text { width: 100%; font-size: 0.95rem; background: transparent; border: none; resize: none; min-height: 24px; padding-bottom: 5px;}
+        .checklist-text:focus { outline: none; border-bottom: 1px solid #ccc; }
+        .sync-status { position: fixed; bottom: 10px; right: 10px; padding: 5px 10px; border-radius: 20px; font-size: 0.7rem; color: white; z-index: 9999; }
+        .sync-ok { background: #27ae60; } .sync-wait { background: #f39c12; }
+    </style>
+</head>
+<body>
+
+<div class="version-tag">v18.0</div>
+<div id="sync-indicator" class="sync-status sync-ok" style="display:none;">☁️ 準備中...</div>
+
+<div id="login-overlay">
+    <div class="login-box">
+        <div style="font-size: 3rem; margin-bottom: 10px;">🔒</div>
+        <div class="login-title">香港自由行 2026</div>
+        <p style="margin-bottom: 20px; opacity: 0.8;">請輸入通行密碼以檢視與編輯行程</p>
+        <input type="password" id="password-input" class="login-input" placeholder="密碼" onkeyup="if(event.key==='Enter') checkPassword()">
+        <button class="btn-unlock" onclick="checkPassword()">解鎖行程</button>
+        <div id="login-error" class="login-error"></div>
+    </div>
+</div>
+
+<header>
+    <h1>🇭🇰 2026 香港自由行</h1>
+    <p>1晚迪士尼 + 3晚市區 | 混合交通策略</p>
+    <div class="header-actions">
+        <button class="action-btn btn-reset" onclick="resetData()">⚠ 重置雲端資料</button>
+    </div>
+</header>
+
+<div class="container">
+    <div class="info-card">
+        <h3 style="margin:0; border-bottom: 2px solid #f0f0f0; padding-bottom:10px;">📋 行程總覽與策略 (雲端同步)</h3>
+        <div class="info-grid" id="info-container"></div>
+    </div>
+    <div id="map-container">
+        <div class="map-hint">☝️ 點擊標題定位；座標可直接貼上 Google Maps 格式</div>
+    </div>
+    <div class="tabs" id="tabs-nav"></div>
+    <div id="content-wrapper"></div>
+    <div class="bottom-grid">
+        <div class="section-box">
+            <h3 style="margin:0;">💰 預算預估 (每人)</h3>
+            <p style="font-size:0.8rem; color:#666;">匯率約 1 HKD ≈ 4.1 TWD</p>
+            <table class="budget-table">
+                <thead><tr><th class="col-del"></th><th class="col-item">項目</th><th class="col-num">HKD</th><th class="col-num">TWD</th></tr></thead>
+                <tbody id="budget-body"></tbody>
+                <tfoot id="budget-foot"></tfoot>
+            </table>
+            <button class="btn-add" onclick="addBudget()">➕ 新增預算項目</button>
+        </div>
+        <div class="section-box">
+            <h3 style="margin:0;">🎒 必備清單 (Checklist)</h3>
+            <div id="checklist-container" style="margin-top:15px;"></div>
+            <button class="btn-add" onclick="addChecklist()">➕ 新增檢查項目</button>
+        </div>
+    </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    // ==========================================
+    // ⚠️ 請填入您的 FIREBASE 設定 (必填) ⚠️
+    // ==========================================
+
+ firebaseConfig = {
+  apiKey: "AIzaSyAH7si2LdTlDNSOa8JbwuNO29MSpr4s7rM",
+  authDomain: "hk-trip-2026-88376.firebaseapp.com",
+  projectId: "hk-trip-2026-88376",
+  storageBucket: "hk-trip-2026-88376.firebasestorage.app",
+  messagingSenderId: "562630604602",
+  appId: "1:562630604602:web:7c30dd2d0bd3e991bc8203"
+};
+
+    // ==========================================
+
+    // 🔑 設定您的解鎖密碼
+    const APP_PASSWORD = "125889"; 
+
+    // 初始化 Firebase (但先不監聽資料，直到解鎖後)
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const dbRef = db.ref('hk_trip_data');
+
+    // 預設資料
+    const defaultItinerary = {
+        version: "v18.0",
+        info: {
+            flight: "去: 6/17 BR867 | 10:05 TPE ➔ 12:05 HKG\n回: 6/21 BR870 | 15:25 HKG ➔ 17:15 TPE",
+            hotel: "Day 1: 迪士尼好萊塢酒店 / 探索家度假酒店\nDay 2-4: 尖沙咀/佐敦 (如恒豐、百樂、The Mira)",
+            strategy: "省錢大眾運輸 + 關鍵時刻計程車\nDay 2 煙火後搭的士直奔市區 (約 HK$300)"
+        },
+        budget: [
+            { item: "交通 (八達通)", hkd: 160, twd: 660 },
+            { item: "交通 (計程車分攤)", hkd: 150, twd: 620 },
+            { item: "景點門票", hkd: 1312, twd: 5380 },
+            { item: "餐飲 (5天)", hkd: 1500, twd: 6150 }
+        ],
+        days: [
+            { id: "day1", label: "Day 1", sub: "大嶼山/迪士尼", color: "#008080", items: [
+                { time: "12:05", title: "✈️ 抵達香港機場", desc: "BR867 航班。\n辦理入境手續。", lat: 22.3080, lng: 113.9185 },
+                { time: "13:00", title: "🚌 城巴 S1 前往東涌", desc: "車資: HK$ 3.5。", lat: 22.2893, lng: 113.9413 },
+                { time: "14:30", title: "🚠 昂坪 360", desc: "水晶纜車。", lat: 22.2559, lng: 113.9028 },
+                { time: "20:30", title: "🏨 迪士尼飯店", desc: "Check-in。", lat: 22.3095, lng: 114.0427 }
+            ]},
+            { id: "day2", label: "Day 2", sub: "全日迪士尼", color: "#e74c3c", items: [
+                { time: "10:00", title: "🏰 迪士尼樂園", desc: "全日遊玩。", lat: 22.3130, lng: 114.0413 },
+                { time: "22:00", title: "🚕 的士直奔市區", desc: "前往尖沙咀。", lat: 22.3040, lng: 114.1715 }
+            ]},
+            { id: "day3", label: "Day 3", sub: "港島", color: "#2980b9", items: [
+                { time: "10:30", title: "🍽️ 澳洲牛奶公司", desc: "早午餐。", lat: 22.3045, lng: 114.1705 },
+                { time: "16:30", title: "🌃 太平山夜景", desc: "纜車。", lat: 22.2710, lng: 114.1499 }
+            ]},
+            { id: "day4", label: "Day 4", sub: "M+/旺角", color: "#8e44ad", items: [
+                { time: "10:00", title: "🎨 M+ 博物館", desc: "西九文化區。", lat: 22.3012, lng: 114.1593 },
+                { time: "14:30", title: "👟 旺角", desc: "波鞋街。", lat: 22.3193, lng: 114.1706 }
+            ]},
+            { id: "day5", label: "Day 5", sub: "返程", color: "#f39c12", items: [
+                { time: "09:30", title: "🥟 蓮香居", desc: "早茶。", lat: 22.2868, lng: 114.1436 },
+                { time: "15:25", title: "✈️ 搭機返台", desc: "BR870。", lat: 22.3080, lng: 113.9185 }
+            ]}
+        ],
+        checklist: [
+            { text: "護照、港簽", checked: false },
+            { text: "迪士尼門票", checked: false },
+            { text: "八達通", checked: false }
+        ]
+    };
+
+    let tripData = null; 
+    let map, markers = [], currentPolyline = null;
+    let isEditing = false; 
+
+    // --- 🔒 解鎖邏輯 ---
+    function checkPassword() {
+        const input = document.getElementById('password-input').value;
+        const errorMsg = document.getElementById('login-error');
+        if (input === APP_PASSWORD) {
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('sync-indicator').style.display = 'block';
+            startFirebaseListener(); // 密碼正確才開始連線資料
+        } else {
+            errorMsg.innerText = "❌ 密碼錯誤，請重新輸入";
+            document.getElementById('password-input').value = '';
+        }
+    }
+
+    // --- Firebase 同步核心 (解鎖後才呼叫) ---
+    function startFirebaseListener() {
+        dbRef.on('value', (snapshot) => {
+            const val = snapshot.val();
+            if (val) {
+                if (!isEditing) {
+                    tripData = val;
+                    refreshUI();
+                    showSyncStatus("ok", "☁️ 已同步");
+                }
+            } else {
+                tripData = JSON.parse(JSON.stringify(defaultItinerary));
+                saveData();
+            }
+        });
+    }
+
+    function saveData() {
+        showSyncStatus("wait", "⏳ 儲存中...");
+        dbRef.set(tripData).then(() => {
+            showSyncStatus("ok", "☁️ 已儲存");
+        }).catch((err) => {
+            showSyncStatus("wait", "❌ 儲存失敗");
+            console.error(err);
+        });
+    }
+
+    function showSyncStatus(type, msg) {
+        const el = document.getElementById('sync-indicator');
+        el.className = `sync-status sync-${type}`;
+        el.innerText = msg;
+    }
+
+    function resetData() {
+        if(confirm("⚠ 警告：這會清空雲端上所有人的資料！確定重置？")) {
+            tripData = JSON.parse(JSON.stringify(defaultItinerary));
+            saveData();
+            refreshUI();
+        }
+    }
+
+    // --- UI 渲染與互動 ---
+    function initApp() {
+        // 這裡只初始化地圖，資料等 Firebase 連線後處理
+        initMap();
+    }
+
+    function refreshUI() {
+        if(!tripData) return;
+        renderInfo();
+        renderTabs();
+        renderLayout();
+        renderBudget();
+        renderChecklist();
+        const activeBtn = document.querySelector('.tab-btn.active');
+        const currentIdx = activeBtn ? parseInt(activeBtn.id.split('-')[1]) : 0;
+        renderDayList(currentIdx);
+        updateMap(currentIdx, false);
+    }
+
+    // --- 資訊卡 ---
+    function renderInfo() {
+        const container = document.getElementById('info-container');
+        const mapping = { flight: "✈️ 航班資訊", hotel: "🏨 住宿安排", strategy: "🚕 交通策略" };
+        container.innerHTML = Object.keys(mapping).map(key => `
+            <div class="info-item">
+                <h4>${mapping[key]}</h4>
+                <textarea class="auto-expand info-textarea" 
+                    onfocus="isEditing=true" onblur="isEditing=false"
+                    oninput="autoResize(this)" 
+                    onchange="updateInfo('${key}', this.value)">${tripData.info[key] || ''}</textarea>
+            </div>
+        `).join('');
+        setTimeout(() => container.querySelectorAll('textarea').forEach(autoResize), 0);
+    }
+    function updateInfo(key, value) { tripData.info[key] = value; saveData(); }
+
+    // --- 行程 ---
+    function renderDayList(dayIndex) {
+        const list = document.getElementById(`list-${dayIndex}`);
+        const items = tripData.days[dayIndex].items || [];
+        items.sort((a, b) => (parseInt(a.time.replace(':','')) || 0) - (parseInt(b.time.replace(':','')) || 0));
+
+        list.innerHTML = items.map((item, idx) => `
+            <div class="timeline-item">
+                <button class="btn-delete" onclick="deleteItem(${dayIndex}, ${idx})">🗑️</button>
+                <input type="time" class="edit-time" value="${item.time}" 
+                    onfocus="isEditing=true" onblur="isEditing=false"
+                    onchange="updateItem(${dayIndex}, ${idx}, 'time', this.value)">
+                
+                <input type="text" class="edit-title" value="${item.title}" 
+                    onclick="focusMarker(${item.lat}, ${item.lng})"
+                    onfocus="isEditing=true" onblur="isEditing=false"
+                    oninput="updateSearchLink(this, ${dayIndex}, ${idx})" 
+                    onchange="updateItem(${dayIndex}, ${idx}, 'title', this.value)">
+                
+                <textarea class="auto-expand edit-desc" placeholder="行程說明..." 
+                    onfocus="isEditing=true" onblur="isEditing=false"
+                    oninput="autoResize(this)" 
+                    onchange="updateItem(${dayIndex}, ${idx}, 'desc', this.value)">${item.desc}</textarea>
+                
+                <div class="coord-wrapper">
+                    <span class="coord-label">📍 座標</span>
+                    <input type="text" class="coord-input" value="${item.lat}" 
+                        onfocus="isEditing=true" onblur="isEditing=false"
+                        onchange="updateItem(${dayIndex}, ${idx}, 'lat', this.value)" placeholder="Lat">
+                    <input type="text" class="coord-input" value="${item.lng}" 
+                        onfocus="isEditing=true" onblur="isEditing=false"
+                        onchange="updateItem(${dayIndex}, ${idx}, 'lng', this.value)" placeholder="Lng">
+                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title)}" target="_blank" class="search-btn" id="search-${dayIndex}-${idx}">🔍 找座標</a>
+                </div>
+            </div>
+        `).join('');
+        requestAnimationFrame(() => list.querySelectorAll('textarea').forEach(autoResize));
+    }
+
+    function updateItem(dayIdx, itemIdx, field, value) {
+        if ((field === 'lat' || field === 'lng') && typeof value === 'string' && value.includes(',')) {
+            const parts = value.replace(/[()]/g, '').split(',');
+            if (parts.length === 2) {
+                const lat = parseFloat(parts[0].trim());
+                const lng = parseFloat(parts[1].trim());
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    tripData.days[dayIdx].items[itemIdx].lat = lat;
+                    tripData.days[dayIdx].items[itemIdx].lng = lng;
+                    saveData();
+                    renderDayList(dayIdx); 
+                    focusMarker(lat, lng);
+                    return;
+                }
+            }
+        }
+
+        if (field === 'lat' || field === 'lng') value = parseFloat(value);
+        tripData.days[dayIdx].items[itemIdx][field] = value;
+        saveData();
+        
+        if(field === 'time') renderDayList(dayIdx);
+        if(field === 'lat' || field === 'lng') {
+            updateMap(dayIdx, false);
+            const item = tripData.days[dayIdx].items[itemIdx];
+            focusMarker(item.lat, item.lng);
+        }
+    }
+
+    function addItem(dayIdx) {
+        const center = map.getCenter();
+        const lat = parseFloat(center.lat.toFixed(4));
+        const lng = parseFloat(center.lng.toFixed(4));
+        if(!tripData.days[dayIdx].items) tripData.days[dayIdx].items = [];
+        tripData.days[dayIdx].items.push({ time: "12:00", title: "新景點", desc: "", lat: lat, lng: lng });
+        saveData();
+        renderDayList(dayIdx);
+        updateMap(dayIdx, false);
+        setTimeout(() => focusMarker(lat, lng), 300);
+    }
+
+    function deleteItem(dayIdx, idx) {
+        if(confirm("刪除此行程？")) {
+            tripData.days[dayIdx].items.splice(idx, 1);
+            saveData();
+            renderDayList(dayIdx);
+            updateMap(dayIdx, false);
+        }
+    }
+
+    // --- 預算 ---
+    function renderBudget() {
+        const tbody = document.getElementById('budget-body');
+        const tfoot = document.getElementById('budget-foot');
+        let tH = 0, tT = 0;
+        const budget = tripData.budget || [];
+        tbody.innerHTML = budget.map((row, idx) => {
+            tH += parseFloat(row.hkd)||0; tT += parseFloat(row.twd)||0;
+            return `<tr>
+                <td><button class="btn-del-row" onclick="delBudget(${idx})">×</button></td>
+                <td><textarea class="auto-expand budget-input" rows="1" onfocus="isEditing=true" onblur="isEditing=false" oninput="autoResize(this)" onchange="updBudget(${idx},'item',this.value)">${row.item}</textarea></td>
+                <td><input type="number" class="budget-num-input" value="${row.hkd}" onfocus="isEditing=true" onblur="isEditing=false" onchange="updBudget(${idx},'hkd',this.value)"></td>
+                <td><input type="number" class="budget-num-input" value="${row.twd}" onfocus="isEditing=true" onblur="isEditing=false" onchange="updBudget(${idx},'twd',this.value)"></td>
+            </tr>`;
+        }).join('');
+        tfoot.innerHTML = `<tr style="font-weight:bold; background:#e8f6f3; color:#008080"><td></td><td>總計</td><td style="text-align:right">$${tH.toLocaleString()}</td><td style="text-align:right">$${tT.toLocaleString()}</td></tr>`;
+        setTimeout(() => tbody.querySelectorAll('textarea').forEach(autoResize), 0);
+    }
+    function updBudget(idx, k, v) { if(k!=='item') v=parseFloat(v)||0; tripData.budget[idx][k]=v; saveData(); renderBudget(); }
+    function addBudget() { if(!tripData.budget) tripData.budget=[]; tripData.budget.push({item:"新項目",hkd:0,twd:0}); saveData(); renderBudget(); }
+    function delBudget(idx) { if(confirm("刪除?")) { tripData.budget.splice(idx,1); saveData(); renderBudget(); } }
+
+    // --- 檢查清單 ---
+    function renderChecklist() {
+        const el = document.getElementById('checklist-container');
+        const list = tripData.checklist || [];
+        el.innerHTML = list.map((item, idx) => `
+            <div class="checklist-item">
+                <input type="checkbox" ${item.checked?'checked':''} onchange="updCheck(${idx},'checked',this.checked)">
+                <textarea class="auto-expand checklist-text" rows="1" onfocus="isEditing=true" onblur="isEditing=false" oninput="autoResize(this)" onchange="updCheck(${idx},'text',this.value)">${item.text}</textarea>
+                <button class="btn-del-row" onclick="delCheck(${idx})">×</button>
+            </div>
+        `).join('');
+        setTimeout(() => el.querySelectorAll('textarea').forEach(autoResize), 0);
+    }
+    function updCheck(idx, k, v) { tripData.checklist[idx][k] = v; saveData(); }
+    function addChecklist() { if(!tripData.checklist) tripData.checklist=[]; tripData.checklist.push({text:"",checked:false}); saveData(); renderChecklist(); }
+    function delCheck(idx) { if(confirm("刪除?")) { tripData.checklist.splice(idx, 1); saveData(); renderChecklist(); } }
+
+    // --- 輔助 ---
+    function renderTabs() {
+        document.getElementById('tabs-nav').innerHTML = tripData.days.map((day, index) => `
+            <button class="tab-btn" onclick="switchTab(${index})" id="btn-${index}">
+                ${day.label}<br><span>${day.sub}</span>
+            </button>
+        `).join('');
+    }
+    function renderLayout() {
+        document.getElementById('content-wrapper').innerHTML = tripData.days.map((day, idx) => `
+            <div id="content-${idx}" class="tab-content">
+                <div id="list-${idx}"></div>
+                <button class="btn-add" onclick="addItem(${idx})"><span>📍</span> 在目前地圖中心新增景點</button>
+            </div>
+        `).join('');
+    }
+    function switchTab(index) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(`content-${index}`).classList.add('active');
+        document.getElementById(`btn-${index}`).classList.add('active');
+        setTimeout(() => { map.invalidateSize(); updateMap(index, true); }, 50);
+        renderDayList(index);
+    }
+    function autoResize(el) { el.style.height = 'auto'; el.style.height = (el.scrollHeight + 5) + 'px'; }
+    function updateSearchLink(input, dayIdx, itemIdx) {
+        const link = document.getElementById(`search-${dayIdx}-${itemIdx}`);
+        if(link) link.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(input.value)}`;
+    }
+
+    // --- 地圖 ---
+    function initMap() {
+        map = L.map('map-container').setView([22.3193, 114.1694], 11);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    }
+    function updateMap(dayIndex, autoFit) {
+        markers.forEach(m => map.removeLayer(m)); markers = [];
+        if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
+        
+        const day = tripData.days[dayIndex];
+        if(!day || !day.items) return;
+        const group = new L.featureGroup();
+        const coords = [];
+        
+        const createIcon = (c) => new L.DivIcon({ className: '', html: `<div style="background:${c}; width:18px; height:18px; border-radius:50%; border:3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`, iconSize: [24,24], iconAnchor: [12,12] });
+
+        day.items.forEach((item, idx) => {
+            if(item.lat && item.lng) {
+                const latLng = [item.lat, item.lng];
+                coords.push(latLng);
+                const marker = L.marker(latLng, { icon: createIcon(day.color), draggable: true })
+                    .bindPopup(`<b>${item.time} ${item.title}</b><br>${item.desc || ''}`).addTo(map);
+                marker.on('dragend', (e) => {
+                    const {lat, lng} = e.target.getLatLng();
+                    tripData.days[dayIndex].items[idx].lat = parseFloat(lat.toFixed(4));
+                    tripData.days[dayIndex].items[idx].lng = parseFloat(lng.toFixed(4));
+                    saveData(); renderDayList(dayIndex); 
+                });
+                markers.push(marker); group.addLayer(marker);
+            }
+        });
+
+        if(coords.length > 1) {
+            currentPolyline = L.polyline(coords, { color: day.color, weight: 3, opacity: 0.6, dashArray: '5, 10' }).addTo(map);
+        }
+        
+        if(autoFit && group.getLayers().length) map.fitBounds(group.getBounds(), { padding: [50,50], maxZoom: 14 });
+    }
+
+    function focusMarker(lat, lng) {
+        if(!map || !lat || !lng) return;
+        map.flyTo([lat, lng], 16, { animate: true, duration: 1 });
+        markers.forEach(m => {
+            const pos = m.getLatLng();
+            if(Math.abs(pos.lat - lat) < 0.0001 && Math.abs(pos.lng - lng) < 0.0001) m.openPopup();
+        });
+    }
+
+    initApp();
+</script>
+</body>
+</html>
