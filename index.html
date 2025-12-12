@@ -3,31 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2026 香港自由行 (v18.0 安全鎖定版)</title>
+    <title>2026 香港自由行 (v18.1 雲端管理版)</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
+        /* 樣式保持不變 */
         :root { --primary: #008080; --secondary: #2c3e50; --bg: #f4f6f8; --card-bg: #ffffff; --text: #333; --delete: #e74c3c; --add: #27ae60; --accent: #f39c12; }
         body { font-family: 'Helvetica Neue', Arial, 'Microsoft JhengHei', sans-serif; margin: 0; padding: 0; background-color: var(--bg); color: var(--text); line-height: 1.6; }
-        
-        /* 版本標籤 */
         .version-tag { background: #333; color: #fff; font-size: 0.75rem; padding: 3px 8px; position: fixed; top: 0; left: 0; z-index: 9000; border-bottom-right-radius: 6px; opacity: 0.9; font-family: monospace; letter-spacing: 1px; }
-
-        /* --- 🔐 鎖定畫面樣式 --- */
-        #login-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(44, 62, 80, 0.98); /* 深色背景擋住內容 */
-            z-index: 10000; /* 最高層級 */
-            display: flex; justify-content: center; align-items: center; flex-direction: column;
-            color: white; backdrop-filter: blur(5px);
-        }
+        #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(44, 62, 80, 0.98); z-index: 10000; display: flex; justify-content: center; align-items: center; flex-direction: column; color: white; backdrop-filter: blur(5px); }
         .login-box { text-align: center; background: rgba(255,255,255,0.1); padding: 40px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
         .login-title { font-size: 1.5rem; margin-bottom: 20px; font-weight: bold; }
         .login-input { padding: 10px 15px; font-size: 1.2rem; border-radius: 8px; border: none; outline: none; text-align: center; width: 200px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;}
         .btn-unlock { padding: 10px 30px; background: var(--add); color: white; border: none; border-radius: 30px; font-size: 1rem; cursor: pointer; transition: 0.2s; font-weight: bold; }
         .btn-unlock:hover { transform: scale(1.05); background: #219150; }
         .login-error { color: #e74c3c; margin-top: 10px; font-size: 0.9rem; min-height: 20px; }
-
-        /* 一般介面樣式 */
         header { background: linear-gradient(135deg, var(--secondary), var(--primary)); color: white; padding: 2rem 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; }
         .header-actions { display: flex; justify-content: center; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
         .action-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.5); color: white; padding: 6px 15px; font-size: 0.85rem; cursor: pointer; border-radius: 20px; transition: all 0.2s; display: flex; align-items: center; gap: 5px; }
@@ -90,7 +79,7 @@
 </head>
 <body>
 
-<div class="version-tag">v18.0</div>
+<div class="version-tag">v18.1</div>
 <div id="sync-indicator" class="sync-status sync-ok" style="display:none;">☁️ 準備中...</div>
 
 <div id="login-overlay">
@@ -108,8 +97,11 @@
     <h1>🇭🇰 2026 香港自由行</h1>
     <p>1晚迪士尼 + 3晚市區 | 混合交通策略</p>
     <div class="header-actions">
+        <button class="action-btn" onclick="exportData()">⬇️ 匯出備份</button>
+        <button class="action-btn" onclick="document.getElementById('importFile').click()">⬆️ 匯入備份</button>
         <button class="action-btn btn-reset" onclick="resetData()">⚠ 重置雲端資料</button>
     </div>
+    <input type="file" id="importFile" style="display:none" onchange="importData(this)" accept=".json">
 </header>
 
 <div class="container">
@@ -164,14 +156,14 @@
     // 🔑 設定您的解鎖密碼
     const APP_PASSWORD = "125889"; 
 
-    // 初始化 Firebase (但先不監聽資料，直到解鎖後)
+    // 初始化 Firebase
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     const dbRef = db.ref('hk_trip_data');
 
     // 預設資料
     const defaultItinerary = {
-        version: "v18.0",
+        version: "v18.1",
         info: {
             flight: "去: 6/17 BR867 | 10:05 TPE ➔ 12:05 HKG\n回: 6/21 BR870 | 15:25 HKG ➔ 17:15 TPE",
             hotel: "Day 1: 迪士尼好萊塢酒店 / 探索家度假酒店\nDay 2-4: 尖沙咀/佐敦 (如恒豐、百樂、The Mira)",
@@ -225,14 +217,14 @@
         if (input === APP_PASSWORD) {
             document.getElementById('login-overlay').style.display = 'none';
             document.getElementById('sync-indicator').style.display = 'block';
-            startFirebaseListener(); // 密碼正確才開始連線資料
+            startFirebaseListener(); 
         } else {
             errorMsg.innerText = "❌ 密碼錯誤，請重新輸入";
             document.getElementById('password-input').value = '';
         }
     }
 
-    // --- Firebase 同步核心 (解鎖後才呼叫) ---
+    // --- Firebase 同步 ---
     function startFirebaseListener() {
         dbRef.on('value', (snapshot) => {
             const val = snapshot.val();
@@ -254,7 +246,7 @@
         dbRef.set(tripData).then(() => {
             showSyncStatus("ok", "☁️ 已儲存");
         }).catch((err) => {
-            showSyncStatus("wait", "❌ 儲存失敗");
+            showSyncStatus("wait", "❌ 儲存失敗 (請檢查權限)");
             console.error(err);
         });
     }
@@ -273,11 +265,36 @@
         }
     }
 
-    // --- UI 渲染與互動 ---
-    function initApp() {
-        // 這裡只初始化地圖，資料等 Firebase 連線後處理
-        initMap();
+    // --- 匯入/匯出 (上傳JSON到雲端) ---
+    function exportData() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(tripData));
+        const a = document.createElement('a');
+        a.href = dataStr; a.download = "hk_trip_2026_cloud_backup.json";
+        document.body.appendChild(a); a.click(); a.remove();
     }
+
+    function importData(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const json = JSON.parse(e.target.result);
+                if (json.days) {
+                    if(confirm("確定要將此檔案上傳到雲端？(將覆蓋現有資料)")) {
+                        tripData = json;
+                        saveData(); // 關鍵：上傳到 Firebase
+                        refreshUI();
+                        alert("✅ 上傳成功！所有裝置已同步");
+                    }
+                } else alert("❌ 格式錯誤");
+            } catch (err) { alert("❌ 無效檔案"); }
+        };
+        reader.readAsText(file); input.value = ''; 
+    }
+
+    // --- UI 渲染與互動 ---
+    function initApp() { initMap(); }
 
     function refreshUI() {
         if(!tripData) return;
