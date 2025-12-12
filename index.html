@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2026 香港自由行 (v18.1 雲端管理版)</title>
+    <title>2026 香港自由行 (v18.2 連線修復版)</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        /* 樣式保持不變 */
+        /* 樣式與 v18.1 完全相同，省略以節省篇幅，請直接使用 v18.1 的 CSS */
         :root { --primary: #008080; --secondary: #2c3e50; --bg: #f4f6f8; --card-bg: #ffffff; --text: #333; --delete: #e74c3c; --add: #27ae60; --accent: #f39c12; }
         body { font-family: 'Helvetica Neue', Arial, 'Microsoft JhengHei', sans-serif; margin: 0; padding: 0; background-color: var(--bg); color: var(--text); line-height: 1.6; }
         .version-tag { background: #333; color: #fff; font-size: 0.75rem; padding: 3px 8px; position: fixed; top: 0; left: 0; z-index: 9000; border-bottom-right-radius: 6px; opacity: 0.9; font-family: monospace; letter-spacing: 1px; }
@@ -79,7 +79,7 @@
 </head>
 <body>
 
-<div class="version-tag">v18.1</div>
+<div class="version-tag">v18.2</div>
 <div id="sync-indicator" class="sync-status sync-ok" style="display:none;">☁️ 準備中...</div>
 
 <div id="login-overlay">
@@ -133,23 +133,22 @@
     </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
     // ==========================================
     // ⚠️ 請填入您的 FIREBASE 設定 (必填) ⚠️
     // ==========================================
-
- firebaseConfig = {
-  apiKey: "AIzaSyAH7si2LdTlDNSOa8JbwuNO29MSpr4s7rM",
-  authDomain: "hk-trip-2026-88376.firebaseapp.com",
-  databaseURL: "https://hk-trip-2026-88376-default-rtdb.firebaseio.com",
-  projectId: "hk-trip-2026-88376",
-  storageBucket: "hk-trip-2026-88376.firebasestorage.app",
-  messagingSenderId: "562630604602",
-  appId: "1:562630604602:web:7c30dd2d0bd3e991bc8203"
+const firebaseConfig = {
+  apiKey: "AIzaSyAH7si2LdTlDNSOa8JbwuNO29MSpr4s7rM",
+  authDomain: "hk-trip-2026-88376.firebaseapp.com",
+  databaseURL: "https://hk-trip-2026-88376-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "hk-trip-2026-88376",
+  storageBucket: "hk-trip-2026-88376.firebasestorage.app",
+  messagingSenderId: "562630604602",
+  appId: "1:562630604602:web:7c30dd2d0bd3e991bc8203"
 };
     // ==========================================
 
@@ -163,7 +162,7 @@
 
     // 預設資料
     const defaultItinerary = {
-        version: "v18.1",
+        version: "v18.2",
         info: {
             flight: "去: 6/17 BR867 | 10:05 TPE ➔ 12:05 HKG\n回: 6/21 BR870 | 15:25 HKG ➔ 17:15 TPE",
             hotel: "Day 1: 迪士尼好萊塢酒店 / 探索家度假酒店\nDay 2-4: 尖沙咀/佐敦 (如恒豐、百樂、The Mira)",
@@ -224,7 +223,7 @@
         }
     }
 
-    // --- Firebase 同步 ---
+    // --- Firebase 同步核心 ---
     function startFirebaseListener() {
         dbRef.on('value', (snapshot) => {
             const val = snapshot.val();
@@ -246,7 +245,7 @@
         dbRef.set(tripData).then(() => {
             showSyncStatus("ok", "☁️ 已儲存");
         }).catch((err) => {
-            showSyncStatus("wait", "❌ 儲存失敗 (請檢查權限)");
+            showSyncStatus("wait", "❌ 儲存失敗");
             console.error(err);
         });
     }
@@ -265,7 +264,7 @@
         }
     }
 
-    // --- 匯入/匯出 (上傳JSON到雲端) ---
+    // --- 匯入/匯出 ---
     function exportData() {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(tripData));
         const a = document.createElement('a');
@@ -283,7 +282,7 @@
                 if (json.days) {
                     if(confirm("確定要將此檔案上傳到雲端？(將覆蓋現有資料)")) {
                         tripData = json;
-                        saveData(); // 關鍵：上傳到 Firebase
+                        saveData();
                         refreshUI();
                         alert("✅ 上傳成功！所有裝置已同步");
                     }
